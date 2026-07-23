@@ -26,6 +26,23 @@ if [ -f "$COOLDOWN_FILE" ]; then
     [ "$DIFF" -lt "$COOLDOWN" ] && exit 0
 fi
 
+# Don't stomp a recent Stop-hook "turn" comment with a generic mood ping —
+# the whole point of that comment is to reflect on what Claude just did.
+TURN_PROTECT=30
+if [ -f "$CONFIG_FILE" ]; then
+  _tp=$(jq -r '.turnProtectSeconds // 30' "$CONFIG_FILE" 2>/dev/null || echo 30)
+  [[ "$_tp" =~ ^[0-9]+$ ]] && TURN_PROTECT=$_tp
+fi
+if [ -f "$REACTION_FILE" ]; then
+    LAST_REASON=$(jq -r '.reason // ""' "$REACTION_FILE" 2>/dev/null)
+    if [ "$LAST_REASON" = "turn" ]; then
+        LAST_TS=$(jq -r '.timestamp // 0' "$REACTION_FILE" 2>/dev/null)
+        NOW_MS=$(( $(date +%s) * 1000 ))
+        AGE=$(( (NOW_MS - ${LAST_TS:-0}) / 1000 ))
+        [ "$AGE" -lt "$TURN_PROTECT" ] && exit 0
+    fi
+fi
+
 PROMPT=$(echo "$INPUT" | jq -r '.prompt // ""' 2>/dev/null)
 [ -z "$PROMPT" ] && exit 0
 
